@@ -11,10 +11,13 @@ class RBM_flexable(nnx.Module):
     def __init__(self, in_features: int, out_features: int, *, rngs: jax.Array):
         self.in_features = in_features
         self.out_features = out_features
+        key1, key2 = jax.random.split(rngs)
         self.kernel = nnx.Param(0.01 * jax.random.normal(
-            rngs, (in_features, out_features)))
-        self.bias = nnx.Param(jnp.zeros(out_features))
-        self.local_bias = nnx.Param(jnp.zeros(in_features))
+            key1, (in_features, out_features)) + 1j * 0.01 * jax.random.normal(key2, (in_features, out_features)))
+        self.bias = nnx.Param(jnp.zeros(out_features) +
+                              1j * jnp.zeros(out_features))
+        self.local_bias = nnx.Param(
+            jnp.zeros(in_features) + 1j * jnp.zeros(in_features))
 
     def __call__(self, x: jax.Array):
         y = jnp.dot(x, self.kernel.value) + self.bias.value
@@ -52,3 +55,5 @@ gs.run(n_iter=300, out=log)
 ffn_energy = vstate.expect(H)
 # error = abs((ffn_energy.mean - eig_vals[0]) / eig_vals[0])
 print("Optimized energy and relative error: ", ffn_energy)
+
+# print(model.kernel.value)
