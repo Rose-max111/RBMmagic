@@ -1,5 +1,6 @@
 import jax
 import jax.numpy as jnp
+import numpy as np
 import flax.nnx as nnx
 import netket as nk
 import matplotlib.pyplot as plt
@@ -24,6 +25,23 @@ class RBM_flexable(nnx.Module):
         y = jnp.log(2 * jnp.cosh(y))
         return jnp.sum(y, axis=-1)+jnp.dot(x, self.local_bias.value)
 
+    def control_z(self, ctrl_qubit: int, target_qubit: int):
+        self.out_features = self.out_features + 1
+
+        new_hidden_weight = 1j * np.arccos(1/np.sqrt(3))
+        new_hidden_weights_arr = jnp.zeros((self.in_features, 1))
+        new_hidden_weights_arr.at[[ctrl_qubit, 0]].set(new_hidden_weight)
+        new_hidden_weights_arr.at[[target_qubit, 0]].set(new_hidden_weight)
+        self.kernel = nnx.Param(jnp.concatenate(
+            [self.kernel.value, new_hidden_weights_arr], axis=1))
+        self.bias = nnx.Param(jnp.concatenate(
+            [self.bias.value, jnp.zeros(1)], axis=0))
+        
+        delta_local_bias = 1/2 * np.log(3)
+        new_local_bias = self.local_bias.value.at[ctrl_qubit].add(delta_local_bias)
+        new_local_bias = new_local_bias.at[target_qubit].add(delta_local_bias)
+        
+        self.local_bias = nnx.Param(new_local_bias)
 
 N = 20
 Hilbert = nk.hilbert.Spin(s=1 / 2, N=N)
