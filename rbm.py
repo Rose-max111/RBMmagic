@@ -19,6 +19,13 @@ class RBM_flexable(nnx.Module):
         self.local_bias = nnx.Param(
             jnp.zeros(in_features, dtype=complex))
 
+    def reset(self, kernel_value: jax.Array, bias_value: jax.Array, local_bias_value: jax.Array):
+        self.kernel = nnx.Param(kernel_value)
+        self.bias = nnx.Param(bias_value)
+        self.local_bias = nnx.Param(local_bias_value)
+        self.in_features = kernel_value.shape[0]
+        self.out_features = kernel_value.shape[1]
+
     def __call__(self, x: jax.Array):
         y = jnp.dot(x, self.kernel.value) + self.bias.value
         y = jnp.log(2 * jnp.cosh(y))
@@ -46,6 +53,27 @@ class RBM_flexable(nnx.Module):
             1/2 * np.log(7/3) + 1j * np.pi)
 
         self.local_bias = nnx.Param(new_local_bias)
+
+
+def RBM_call_params(params, x):
+    '''
+    params[0, 1, 2] correspond to kernel.value, bias.value and local_bias.value
+    '''
+    y = jnp.dot(x, params[0]) + params[1]
+    y = jnp.log(2 * jnp.cosh(y))
+    return jnp.sum(y, axis=-1)+jnp.dot(x, params[2])
+
+
+grad_fn = jax.grad(RBM_call_params, argnums=0, holomorphic=True)
+batched_grad_fn = jax.vmap(grad_fn, in_axes=(None, 0))
+
+
+def log_wf_grad(model: RBM_flexable, x: jax.Array):
+    '''
+    x: shape = (batch_size, N)
+    '''
+    params = (model.kernel.value, model.bias.value, model.local_bias.value)
+    return batched_grad_fn(params, x)
 
 
 if __name__ == "__main__":

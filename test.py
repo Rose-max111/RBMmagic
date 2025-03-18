@@ -1,8 +1,10 @@
 import pytest
 import rbm
 import jax
+import timeit
 import netket as nk
 import numpy as np
+import jax.numpy as jnp
 
 
 def test_control_z():
@@ -30,3 +32,58 @@ def test_control_z():
                 amplitude_all_state_after[i] + amplitude_all_state[i]) / np.linalg.norm(amplitude_all_state[i]) < 1e-5
             # print("amplitude_difference = ",
             #       amplitude_all_state_after[i] + amplitude_all_state[i], "amplitude = ", amplitude_all_state[i])
+
+
+def myrbm_call(params, x):
+    kernel, bias, local_bias = params
+    y = np.dot(x, kernel) + bias
+    y = np.log(2 * np.cosh(y))
+    return np.sum(y, axis=-1)+np.dot(x, local_bias)
+
+
+def myrbm_grad(params, x):
+    kernel, bias, local_bias = params
+    local_bias_grad = x.copy()
+    bias_grad = np.tanh(bias + np.dot(x, kernel))
+    kernel_grad = np.expand_dims(x, axis=2) * np.expand_dims(bias_grad, axis=1)
+    return (kernel_grad, bias_grad, local_bias_grad)
+
+
+def test_rbm_auto_grad():
+    N = 14
+    hi = nk.hilbert.Qubit(N)
+    all_state = hi.all_states()
+    model = rbm.RBM_flexable(N, N, rngs=jax.random.PRNGKey(15))
+    bias = np.random.rand(N) + 1j * np.random.rand(N)
+    local_bias = np.random.rand(N) + 1j * np.random.rand(N)
+    kernel = np.array(model.kernel.value)
+
+    model.reset(model.kernel.value, jnp.array(
+        bias), jnp.array(local_bias))
+
+    # test class params is the same as the numpy params
+    assert model.kernel.value == pytest.approx(kernel)
+    assert model.bias.value == pytest.approx(bias)
+    assert model.local_bias.value == pytest.approx(local_bias)
+
+    # test class call is the same as the numpy call
+    model_log_wf = model(all_state)
+    numpy_log_wf = myrbm_call((kernel, bias, local_bias), all_state)
+    assert model_log_wf == pytest.approx(numpy_log_wf)
+    # print("model_log_wf = ", model_log_wf, "numpy_log_wf = ", numpy_log_wf)
+
+    # test class grad is the same as the numpy grad
+    model_grad = rbm.batched_grad_fn(
+        (model.kernel.value, model.bias.value, model.local_bias.value), all_state)
+    numpy_grad = myrbm_grad((kernel, bias, local_bias), all_state)
+    assert model_grad[2] == pytest.approx(numpy_grad[2])
+    assert model_grad[1] == pytest.approx(numpy_grad[1])
+    assert model_grad[0] == pytest.approx(numpy_grad[0])
+
+    # evaluate the time of both method
+    time_model_grad = timeit.timeit(
+        lambda: rbm.batched_grad_fn((model.kernel.value, model.bias.value, model.local_bias.value), all_state), number=100)
+    time_numpy_grad = timeit.timeit(
+        lambda: myrbm_grad((kernel, bias, local_bias), all_state), number=100)
+    print("time_model_grad = ", time_model_grad,
+          "time_numpy_grad = ", time_numpy_grad)
