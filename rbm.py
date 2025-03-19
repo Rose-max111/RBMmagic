@@ -55,7 +55,7 @@ class RBM_flexable(nnx.Module):
         self.local_bias = nnx.Param(new_local_bias)
 
 
-class RBM_H_State():
+class RBM_H_State(nnx.Module):
     def __init__(self, model: RBM_flexable, qubit: int):
         self.model = model
         self.qubit = qubit
@@ -64,6 +64,9 @@ class RBM_H_State():
         another_x = x.at[:, self.qubit].set(1 - x[:, self.qubit])
         x_val, another_x_val = self.model(x), self.model(another_x)
         return jnp.log((jnp.exp(another_x_val) + jnp.exp(x_val) * (1 - 2*x[:, self.qubit])) / np.sqrt(2))
+
+    def apply(self, pars, x: jax.Array):
+        return self.__call__(x)
 
 
 def RBM_call_params(params, x):

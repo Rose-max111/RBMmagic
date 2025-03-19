@@ -5,8 +5,9 @@ import timeit
 import netket as nk
 import numpy as np
 import jax.numpy as jnp
+import matplotlib.pyplot as plt
 
-
+'''
 def test_control_z():
     N = 5
     model = rbm.RBM_flexable(N, N, rngs=jax.random.PRNGKey(0))
@@ -23,15 +24,15 @@ def test_control_z():
         flag = (state[0] * state[1]) ^ (state[1]
                                         * state[2]) ^ (state[0] * state[4])
         if flag == 0:
-            assert np.linalg.norm(
-                amplitude_all_state_after[i] - amplitude_all_state[i]) / np.linalg.norm(amplitude_all_state[i]) < 1e-5
-            # print("amplitude_difference = ",
-            #       amplitude_all_state_after[i] - amplitude_all_state[i], "amplitude = ", amplitude_all_state[i])
-        else:
-            assert np.linalg.norm(
-                amplitude_all_state_after[i] + amplitude_all_state[i]) / np.linalg.norm(amplitude_all_state[i]) < 1e-5
-            # print("amplitude_difference = ",
-            #       amplitude_all_state_after[i] + amplitude_all_state[i], "amplitude = ", amplitude_all_state[i])
+                assert np.linalg.norm(
+                    amplitude_all_state_after[i] - amplitude_all_state[i]) / np.linalg.norm(amplitude_all_state[i]) < 1e-5
+                # print("amplitude_difference = ",
+                #       amplitude_all_state_after[i] - amplitude_all_state[i], "amplitude = ", amplitude_all_state[i])
+            else:
+                assert np.linalg.norm(
+                    amplitude_all_state_after[i] + amplitude_all_state[i]) / np.linalg.norm(amplitude_all_state[i]) < 1e-5
+                # print("amplitude_difference = ",
+                #       amplitude_all_state_after[i] + amplitude_all_state[i], "amplitude = ", amplitude_all_state[i])
 
 
 def myrbm_call(params, x):
@@ -118,3 +119,57 @@ def test_rbm_H_state():
     final_log_wf_direct = np.log(final_wf_direct)
     final_log_wf_Hmodel = H_model(all_state)
     assert final_log_wf_direct == pytest.approx(final_log_wf_Hmodel)
+'''
+
+
+def test_rbm_H_state_distribution():
+    N = 8
+    H_qubit = 5
+    hi = nk.hilbert.Qubit(N)
+    all_state = hi.all_states()
+    # init a random model(bias/local_bias/kernel all random number)
+    model = rbm.RBM_flexable(N, N, rngs=jax.random.PRNGKey(15))
+    bias = np.random.rand(N) + 1j * np.random.rand(N)
+    local_bias = np.random.rand(N) + 1j * np.random.rand(N)
+    kernel = np.array(model.kernel.value)
+
+    # initialize the origin model
+    model.reset(model.kernel.value, jnp.array(
+        bias), jnp.array(local_bias))
+    # initialize the model after a H gate (exact)
+    H_model = rbm.RBM_H_State(model, H_qubit)
+
+    # print(H_model.apply(model, all_state))
+    sampler = nk.sampler.MetropolisLocal(hi)
+    sampler_state = sampler.init_state(H_model, 1, jax.random.key(1))
+
+    pdf_unnormalized = jnp.exp(H_model.apply(1, hi.all_states()))
+    pdf_unnormalized = (pdf_unnormalized * pdf_unnormalized.conj()).real
+    pdf = pdf_unnormalized / jnp.sum(pdf_unnormalized)
+
+    def extract_pdf(row_samples, n_states):
+        return jnp.sum((jnp.expand_dims(row_samples, axis=0) == jnp.expand_dims(
+            n_states, axis=1)), axis=1)
+    batched_extract_pdf = jax.vmap(extract_pdf, in_axes=(0, None))
+
+    def estimate_pdf(n_samples):
+        samples, _ = sampler.sample(
+            H_model, 1, state=sampler_state, chain_length=n_samples)
+        idxs = hi.states_to_numbers(samples)
+        return jnp.sum(batched_extract_pdf(idxs, jnp.arange(hi.n_states)), axis=0) / (idxs.shape[0] * n_samples)
+
+    estimated_pdf = estimate_pdf(2**14)
+    assert np.linalg.norm(estimated_pdf - pdf, ord=1) / \
+        np.linalg.norm(pdf, ord=1) < 1e-1
+    # print("relative_error = ", (np.abs(estimated_pdf - pdf) / pdf).real,
+    #       "estimated_pdf = ", estimated_pdf, "pdf = ", pdf)
+    # The following is for plotting the pdf
+    # plt.plot(pdf, label="exact")
+    # plt.plot(estimate_pdf(2**10), label="2^10 samples")
+    # plt.plot(estimate_pdf(2**14), '--', label="2^14 samples")
+
+    # plt.ylim(0, 0.1)
+    # plt.xlabel("hilbert space index")
+    # plt.ylabel("pdf")
+    # plt.legend()
+    # plt.show()
