@@ -43,35 +43,37 @@ class RBM_flexable(nnx.Module):
         
         self.local_bias = nnx.Param(new_local_bias)
 
-N = 20
-Hilbert = nk.hilbert.Spin(s=1 / 2, N=N)
 
-Gamma = -1
-H = sum([Gamma * sigmax(Hilbert, i) for i in range(N)])
-V = -1
-H += sum([V * sigmaz(Hilbert, i) * sigmaz(Hilbert, (i + 1) % N)
-         for i in range(N)])
+if __name__ == "__main__":
+    N = 20
+    Hilbert = nk.hilbert.Spin(s=1 / 2, N=N)
 
-model = RBM_flexable(N, N, rngs=jax.random.PRNGKey(0))
+    Gamma = -1
+    H = sum([Gamma * sigmax(Hilbert, i) for i in range(N)])
+    V = -1
+    H += sum([V * sigmaz(Hilbert, i) * sigmaz(Hilbert, (i + 1) % N)
+            for i in range(N)])
 
-# model = nk.models.RBM(alpha=1)
-sampler = nk.sampler.MetropolisLocal(Hilbert)
-vstate = nk.vqs.MCState(sampler, model, n_samples=1008)
+    model = RBM_flexable(N, N, rngs=jax.random.PRNGKey(0))
 
-optimizer = nk.optimizer.Sgd(learning_rate=0.1)
+    # model = nk.models.RBM(alpha=1)
+    sampler = nk.sampler.MetropolisLocal(Hilbert)
+    vstate = nk.vqs.MCState(sampler, model, n_samples=1008)
 
-gs = nk.driver.VMC(
-    H,
-    optimizer,
-    variational_state=vstate,
-    preconditioner=nk.optimizer.SR(diag_shift=0.1),
-)
+    optimizer = nk.optimizer.Sgd(learning_rate=0.1)
 
-log = nk.logging.RuntimeLog()
-gs.run(n_iter=300, out=log)
+    gs = nk.driver.VMC(
+        H,
+        optimizer,
+        variational_state=vstate,
+        preconditioner=nk.optimizer.SR(diag_shift=0.1),
+    )
 
-ffn_energy = vstate.expect(H)
-# error = abs((ffn_energy.mean - eig_vals[0]) / eig_vals[0])
-print("Optimized energy and relative error: ", ffn_energy)
+    log = nk.logging.RuntimeLog()
+    gs.run(n_iter=300, out=log)
 
-# print(model.kernel.value)
+    ffn_energy = vstate.expect(H)
+    # error = abs((ffn_energy.mean - eig_vals[0]) / eig_vals[0])
+    print("Optimized energy and relative error: ", ffn_energy)
+
+    # print(model.kernel.value)
