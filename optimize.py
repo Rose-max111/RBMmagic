@@ -57,6 +57,7 @@ class mcmc_optimize():
         merged_grad_params = solve(S, merged_grad_F, assume_a="her")
         delta_params = {"kernel": merged_grad_params[:grad_F["kernel"].size].reshape(
             grad_F["kernel"].shape), "bias": merged_grad_params[grad_F["kernel"].size:grad_F["kernel"].size+grad_F["bias"].size], "local_bias": merged_grad_params[grad_F["kernel"].size+grad_F["bias"].size:]}
+        delta_params = jax.tree_map(lambda x: x*F, delta_params)
 
         return F, delta_params
 
