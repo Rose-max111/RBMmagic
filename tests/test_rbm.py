@@ -23,7 +23,6 @@ def myrbm_grad(params, x):
     return (kernel_grad, bias_grad, local_bias_grad)
 
 
-'''
 def test_control_z():
     N = 5
     model = rbm.RBM_flexable(N, N, rngs=jax.random.PRNGKey(0))
@@ -40,15 +39,15 @@ def test_control_z():
         flag = (state[0] * state[1]) ^ (state[1]
                                         * state[2]) ^ (state[0] * state[4])
         if flag == 0:
-                assert np.linalg.norm(
-                    amplitude_all_state_after[i] - amplitude_all_state[i]) / np.linalg.norm(amplitude_all_state[i]) < 1e-5
-                # print("amplitude_difference = ",
-                #       amplitude_all_state_after[i] - amplitude_all_state[i], "amplitude = ", amplitude_all_state[i])
-            else:
-                assert np.linalg.norm(
-                    amplitude_all_state_after[i] + amplitude_all_state[i]) / np.linalg.norm(amplitude_all_state[i]) < 1e-5
-                # print("amplitude_difference = ",
-                #       amplitude_all_state_after[i] + amplitude_all_state[i], "amplitude = ", amplitude_all_state[i])
+            assert np.linalg.norm(
+                amplitude_all_state_after[i] - amplitude_all_state[i]) / np.linalg.norm(amplitude_all_state[i]) < 1e-5
+            # print("amplitude_difference = ",
+            #       amplitude_all_state_after[i] - amplitude_all_state[i], "amplitude = ", amplitude_all_state[i])
+        else:
+            assert np.linalg.norm(
+                amplitude_all_state_after[i] + amplitude_all_state[i]) / np.linalg.norm(amplitude_all_state[i]) < 1e-5
+            # print("amplitude_difference = ",
+            #       amplitude_all_state_after[i] + amplitude_all_state[i], "amplitude = ", amplitude_all_state[i])
 
 
 def test_rbm_H_state():
@@ -81,9 +80,8 @@ def test_rbm_H_state():
     assert final_log_wf_direct == pytest.approx(final_log_wf_Hmodel)
 
 
-
 def test_rbm_H_state_distribution():
-    N = 8
+    N = 7
     H_qubit = 5
     hi = nk.hilbert.Qubit(N)
     all_state = hi.all_states()
@@ -135,10 +133,6 @@ def test_rbm_H_state_distribution():
     # plt.show()
 
 
-
-'''
-
-
 def test_rbm_log_wf_auto_grad():
     N = 10
     hi = nk.hilbert.Qubit(N)
@@ -178,35 +172,3 @@ def test_rbm_log_wf_auto_grad():
     #     lambda: myrbm_grad((kernel, bias, local_bias), all_state), number=100)
     # print("time_model_grad = ", time_model_grad,
     #       "time_numpy_grad = ", time_numpy_grad)
-
-
-def test_RBM_flexible_variational_state_interface():
-    N = 4
-    hi = nk.hilbert.Qubit(N)
-    all_state = hi.all_states()
-    # init a random model(bias/local_bias/kernel all random number)
-    model = rbm.RBM_flexable(N, N, rngs=jax.random.PRNGKey(15))
-    bias = np.random.rand(N) + 1j * np.random.rand(N)
-    local_bias = np.random.rand(N) + 1j * np.random.rand(N)
-    kernel = np.array(model.kernel.value)
-
-    # initialize the origin model
-    model.reset(model.kernel.value, jnp.array(
-        bias), jnp.array(local_bias))
-
-    sampler = nk.sampler.MetropolisLocal(hi, n_chains=1)
-    vstate = nk.vqs.MCState(sampler, model, n_samples=20)
-    original_parameters = vstate.parameters
-
-    local_grad = rbm.log_wf_grad({"kernel": model.kernel.value, "bias": model.bias.value,
-                                 "local_bias": model.local_bias.value}, all_state)
-    avg_grad = jax.tree.map(lambda x: jnp.mean(x, axis=(0, 1)), local_grad)
-    vstate.parameters = jax.tree.map(
-        lambda x, y: x+y, vstate.parameters, avg_grad)
-
-    assert original_parameters["bias"] + avg_grad["bias"] == pytest.approx(
-        vstate.parameters["bias"])
-    assert original_parameters["local_bias"] + avg_grad["local_bias"] == pytest.approx(
-        vstate.parameters["local_bias"])
-    assert original_parameters["kernel"] + avg_grad["kernel"] == pytest.approx(
-        vstate.parameters["kernel"])

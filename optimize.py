@@ -13,20 +13,19 @@ from rbm import RBM_flexable, log_wf_grad, RBM_H_State
 
 
 class mcmc_optimize():
-    def __init__(self, model: RBM_flexable, hilbert: nk.hilbert.Hilbert, n_chains: int, n_sweeps: int, n_samples: int, n_discard: int):
+    def __init__(self, model: RBM_flexable, hilbert, n_chains: int, n_sweeps: int, n_samples: int):
         self.model = model
         self.hilbert = hilbert
         self.n_chains = n_chains
         self.n_sweeps = n_sweeps
         self.n_samples = n_samples
-        self.n_discard = n_discard
 
     def fidelity(self, psi_phi, phi_phi, psi_psi, phi_psi):
         o1 = logsumexp(phi_psi - psi_psi, b=1.0 /
-                       (phi_phi.shape[0]))
+                       (phi_psi.shape[0]))
         o2 = logsumexp(psi_phi - phi_phi, b=1.0 /
                        (psi_phi.shape[0]))
-        return np.exp(o1 + o2).real
+        return np.exp(o1 + o2)
 
     def fidelity_grad(self, phi_psi, psi_psi, O):
         term1 = jax.tree.map(lambda x: np.mean(x.conj(), axis=0), O)

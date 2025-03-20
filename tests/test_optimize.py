@@ -1,0 +1,59 @@
+import optimize
+import jax
+import jax.numpy as jnp
+import numpy as np
+import netket as nk
+import rbm
+import pytest
+
+from netket.operator.spin import sigmax, sigmaz
+
+
+def test_mcmc_fidelity():
+    N = 7
+    hqubit = 5
+    hi = nk.hilbert.Qubit(N)
+    all_state = hi.all_states()
+    # init a random model(bias/local_bias/kernel all random number)
+    model = rbm.RBM_flexable(N, N, rngs=jax.random.PRNGKey(15))
+    bias = np.random.rand(N) + 1j * np.random.rand(N)
+    local_bias = np.random.rand(N) + 1j * np.random.rand(N)
+    # initialize the origin model
+    model.reset(model.kernel.value, jnp.array(
+        bias), jnp.array(local_bias))
+    Hmodel = rbm.RBM_H_State(model, hqubit)
+
+    opmodel = optimize.mcmc_optimize(model, hi, 16, 10, 1000)
+
+    sampler_psi = nk.sampler.MetropolisLocal(hi)
+    vstate_psi = nk.vqs.MCState(sampler_psi, model, n_samples=2**16)
+
+    sampler_phi = nk.sampler.MetropolisLocal(hi)
+    sampler_phi_state = sampler_phi.init_state(
+        Hmodel, 1, jax.random.key(0))
+    samples_phi, sampler_phi_state = sampler_phi.sample(
+        Hmodel, 1, state=sampler_phi_state, chain_length=2**16)
+    # according psi distribution
+    samples_psi = vstate_psi.samples.reshape(-1, N)
+    samples_phi = samples_phi.reshape(-1, N)
+
+    psi_psi = model(samples_psi)
+    phi_psi = Hmodel(samples_psi)
+    psi_phi = model(samples_phi)
+    phi_phi = Hmodel(samples_phi)
+    fidelity = opmodel.fidelity(
+        psi_phi, phi_phi, psi_psi, phi_psi)
+    # print(fidelity)
+
+    # Hoperator = 1/np.sqrt(2) * (sigmax(hi, hqubit)+sigmaz(hi, hqubit))
+    # value = vstate_psi.expect(Hoperator)
+    # # print(value)
+    # print(value.mean * value.mean.conj())
+
+    amplitude_psi = np.exp(model(all_state))
+    amplitude_phi = np.exp(Hmodel(all_state))
+    fidelity_exact = np.sum((amplitude_psi.conj()*amplitude_phi)) / \
+        np.linalg.norm(amplitude_psi) / np.linalg.norm(amplitude_phi)
+    # print(fidelity_exact**2)
+
+    assert np.abs((fidelity - fidelity_exact**2).real) <= 1e-2
