@@ -7,6 +7,22 @@ import numpy as np
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 
+
+def myrbm_call(params, x):
+    kernel, bias, local_bias = params
+    y = np.dot(x, kernel) + bias
+    y = np.log(2 * np.cosh(y))
+    return np.sum(y, axis=-1)+np.dot(x, local_bias)
+
+
+def myrbm_grad(params, x):
+    kernel, bias, local_bias = params
+    local_bias_grad = x.copy()
+    bias_grad = np.tanh(bias + np.dot(x, kernel))
+    kernel_grad = np.expand_dims(x, axis=2) * np.expand_dims(bias_grad, axis=1)
+    return (kernel_grad, bias_grad, local_bias_grad)
+
+
 '''
 def test_control_z():
     N = 5
@@ -33,62 +49,6 @@ def test_control_z():
                     amplitude_all_state_after[i] + amplitude_all_state[i]) / np.linalg.norm(amplitude_all_state[i]) < 1e-5
                 # print("amplitude_difference = ",
                 #       amplitude_all_state_after[i] + amplitude_all_state[i], "amplitude = ", amplitude_all_state[i])
-
-
-def myrbm_call(params, x):
-    kernel, bias, local_bias = params
-    y = np.dot(x, kernel) + bias
-    y = np.log(2 * np.cosh(y))
-    return np.sum(y, axis=-1)+np.dot(x, local_bias)
-
-
-def myrbm_grad(params, x):
-    kernel, bias, local_bias = params
-    local_bias_grad = x.copy()
-    bias_grad = np.tanh(bias + np.dot(x, kernel))
-    kernel_grad = np.expand_dims(x, axis=2) * np.expand_dims(bias_grad, axis=1)
-    return (kernel_grad, bias_grad, local_bias_grad)
-
-
-def test_rbm_log_wf_auto_grad():
-    N = 10
-    hi = nk.hilbert.Qubit(N)
-    all_state = hi.all_states()
-    # init a random model(bias/local_bias/kernel all random number)
-    model = rbm.RBM_flexable(N, N, rngs=jax.random.PRNGKey(15))
-    bias = np.random.rand(N) + 1j * np.random.rand(N)
-    local_bias = np.random.rand(N) + 1j * np.random.rand(N)
-    kernel = np.array(model.kernel.value)
-
-    model.reset(model.kernel.value, jnp.array(
-        bias), jnp.array(local_bias))
-
-    # test class params is the same as the numpy params
-    assert model.kernel.value == pytest.approx(kernel)
-    assert model.bias.value == pytest.approx(bias)
-    assert model.local_bias.value == pytest.approx(local_bias)
-
-    # test class call is the same as the numpy call
-    model_log_wf = model(all_state)
-    numpy_log_wf = myrbm_call((kernel, bias, local_bias), all_state)
-    assert model_log_wf == pytest.approx(numpy_log_wf)
-    # print("model_log_wf = ", model_log_wf, "numpy_log_wf = ", numpy_log_wf)
-
-    # test class grad is the same as the numpy grad
-    model_grad = rbm.batched_grad_fn(
-        (model.kernel.value, model.bias.value, model.local_bias.value), all_state)
-    numpy_grad = myrbm_grad((kernel, bias, local_bias), all_state)
-    assert model_grad[2] == pytest.approx(numpy_grad[2])
-    assert model_grad[1] == pytest.approx(numpy_grad[1])
-    assert model_grad[0] == pytest.approx(numpy_grad[0])
-
-    # evaluate the time of both method
-    # time_model_grad = timeit.timeit(
-    #     lambda: rbm.batched_grad_fn((model.kernel.value, model.bias.value, model.local_bias.value), all_state), number=100)
-    # time_numpy_grad = timeit.timeit(
-    #     lambda: myrbm_grad((kernel, bias, local_bias), all_state), number=100)
-    # print("time_model_grad = ", time_model_grad,
-    #       "time_numpy_grad = ", time_numpy_grad)
 
 
 def test_rbm_H_state():
@@ -119,7 +79,7 @@ def test_rbm_H_state():
     final_log_wf_direct = np.log(final_wf_direct)
     final_log_wf_Hmodel = H_model(all_state)
     assert final_log_wf_direct == pytest.approx(final_log_wf_Hmodel)
-'''
+
 
 
 def test_rbm_H_state_distribution():
@@ -173,3 +133,80 @@ def test_rbm_H_state_distribution():
     # plt.ylabel("pdf")
     # plt.legend()
     # plt.show()
+
+
+
+'''
+
+
+def test_rbm_log_wf_auto_grad():
+    N = 10
+    hi = nk.hilbert.Qubit(N)
+    all_state = hi.all_states()
+    # init a random model(bias/local_bias/kernel all random number)
+    model = rbm.RBM_flexable(N, N, rngs=jax.random.PRNGKey(15))
+    bias = np.random.rand(N) + 1j * np.random.rand(N)
+    local_bias = np.random.rand(N) + 1j * np.random.rand(N)
+    kernel = np.array(model.kernel.value)
+
+    model.reset(model.kernel.value, jnp.array(
+        bias), jnp.array(local_bias))
+
+    # test class params is the same as the numpy params
+    assert model.kernel.value == pytest.approx(kernel)
+    assert model.bias.value == pytest.approx(bias)
+    assert model.local_bias.value == pytest.approx(local_bias)
+
+    # test class call is the same as the numpy call
+    model_log_wf = model(all_state)
+    numpy_log_wf = myrbm_call((kernel, bias, local_bias), all_state)
+    assert model_log_wf == pytest.approx(numpy_log_wf)
+    # print("model_log_wf = ", model_log_wf, "numpy_log_wf = ", numpy_log_wf)
+
+    # test class grad is the same as the numpy grad
+    model_grad = rbm.log_wf_grad(
+        {"kernel": model.kernel.value, "bias": model.bias.value, "local_bias": model.local_bias.value}, all_state)
+    numpy_grad = myrbm_grad((kernel, bias, local_bias), all_state)
+    assert model_grad["local_bias"] == pytest.approx(numpy_grad[2])
+    assert model_grad["bias"] == pytest.approx(numpy_grad[1])
+    assert model_grad["kernel"] == pytest.approx(numpy_grad[0])
+
+    # evaluate the time of both method
+    # time_model_grad = timeit.timeit(
+    #     lambda: rbm.batched_grad_fn((model.kernel.value, model.bias.value, model.local_bias.value), all_state), number=100)
+    # time_numpy_grad = timeit.timeit(
+    #     lambda: myrbm_grad((kernel, bias, local_bias), all_state), number=100)
+    # print("time_model_grad = ", time_model_grad,
+    #       "time_numpy_grad = ", time_numpy_grad)
+
+
+def test_RBM_flexible_variational_state_interface():
+    N = 4
+    hi = nk.hilbert.Qubit(N)
+    all_state = hi.all_states()
+    # init a random model(bias/local_bias/kernel all random number)
+    model = rbm.RBM_flexable(N, N, rngs=jax.random.PRNGKey(15))
+    bias = np.random.rand(N) + 1j * np.random.rand(N)
+    local_bias = np.random.rand(N) + 1j * np.random.rand(N)
+    kernel = np.array(model.kernel.value)
+
+    # initialize the origin model
+    model.reset(model.kernel.value, jnp.array(
+        bias), jnp.array(local_bias))
+
+    sampler = nk.sampler.MetropolisLocal(hi, n_chains=1)
+    vstate = nk.vqs.MCState(sampler, model, n_samples=20)
+    original_parameters = vstate.parameters
+
+    local_grad = rbm.log_wf_grad({"kernel": model.kernel.value, "bias": model.bias.value,
+                                 "local_bias": model.local_bias.value}, all_state)
+    avg_grad = jax.tree.map(lambda x: jnp.mean(x, axis=(0, 1)), local_grad)
+    vstate.parameters = jax.tree.map(
+        lambda x, y: x+y, vstate.parameters, avg_grad)
+
+    assert original_parameters["bias"] + avg_grad["bias"] == pytest.approx(
+        vstate.parameters["bias"])
+    assert original_parameters["local_bias"] + avg_grad["local_bias"] == pytest.approx(
+        vstate.parameters["local_bias"])
+    assert original_parameters["kernel"] + avg_grad["kernel"] == pytest.approx(
+        vstate.parameters["kernel"])

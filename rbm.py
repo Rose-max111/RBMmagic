@@ -73,20 +73,19 @@ def RBM_call_params(params, x):
     '''
     params[0, 1, 2] correspond to kernel.value, bias.value and local_bias.value
     '''
-    y = jnp.dot(x, params[0]) + params[1]
+    y = jnp.dot(x, params["kernel"]) + params["bias"]
     y = jnp.log(2 * jnp.cosh(y))
-    return jnp.sum(y, axis=-1)+jnp.dot(x, params[2])
+    return jnp.sum(y, axis=-1)+jnp.dot(x, params["local_bias"])
 
 
 grad_fn = jax.grad(RBM_call_params, argnums=0, holomorphic=True)
 batched_grad_fn = jax.vmap(grad_fn, in_axes=(None, 0))
 
 
-def log_wf_grad(model: RBM_flexable, x: jax.Array):
+def log_wf_grad(params, x: jax.Array):
     '''
-    x: shape = (batch_size, N)
+    x: shape = (n_chain * batch_size, N)
     '''
-    params = (model.kernel.value, model.bias.value, model.local_bias.value)
     return batched_grad_fn(params, x)
 
 
