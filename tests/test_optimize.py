@@ -13,7 +13,6 @@ def exact_fidelity(psi, phi):
     return np.abs(np.sum(psi.conj()*phi)) / np.linalg.norm(psi) / np.linalg.norm(phi)
 
 
-'''
 def test_mcmc_fidelity():
     N = 8
     hqubit = 5
@@ -48,7 +47,7 @@ def test_mcmc_fidelity():
     phi_phi = Hmodel(samples_phi)
     fidelity = opmodel.fidelity(
         psi_phi, phi_phi, psi_psi, phi_psi)
-    print(fidelity)
+    # print(fidelity)
 
     # Hoperator = 1/np.sqrt(2) * (sigmax(hi, hqubit)+sigmaz(hi, hqubit))
     # value = vstate_psi.expect(Hoperator)
@@ -59,10 +58,9 @@ def test_mcmc_fidelity():
     amplitude_phi = np.exp(Hmodel(all_state))
     fidelity_exact = np.sum((amplitude_psi.conj()*amplitude_phi)) / \
         np.linalg.norm(amplitude_psi) / np.linalg.norm(amplitude_phi)
-    print(fidelity_exact**2)
+    # print(fidelity_exact**2)
 
     # assert np.abs((fidelity - fidelity_exact**2).real) <= 1e-2
-'''
 
 
 def test_fidelity_grad():
@@ -150,23 +148,3 @@ def test_hadamard_gate():
     # for i in range(256):
     #     print(exact_amplitude[i], approx_amplitude[i])
     assert fidelity_history[-1] == pytest.approx(fidelity**2, rel=1e-3)
-
-    # sampler_psi = nk.sampler.MetropolisLocal(hi, n_chains=4)
-    # vstate_psi = nk.vqs.MCState(sampler_psi, opmodel.model, n_samples=2**13)
-
-    # sampler_phi = nk.sampler.MetropolisLocal(hi, n_chains=4)
-    # sampler_phi_state = sampler_phi.init_state(
-    #     exact_Hmodel, 1, jax.random.key(0))
-    # samples_phi, sampler_phi_state = sampler_phi.sample(
-    #     exact_Hmodel, 1, state=sampler_phi_state, chain_length=2**13)
-    # # according psi distribution
-    # samples_psi = vstate_psi.samples.reshape(-1, N)
-    # samples_phi = samples_phi.reshape(-1, N)
-
-    # psi_psi = opmodel.model(samples_psi)
-    # phi_psi = exact_Hmodel(samples_psi)
-    # psi_phi = opmodel.model(samples_phi)
-    # phi_phi = exact_Hmodel(samples_phi)
-    # fidelity = opmodel.fidelity(
-    #     psi_phi, phi_phi, psi_psi, phi_psi)
-    # print(fidelity)
