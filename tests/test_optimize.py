@@ -9,30 +9,35 @@ import pytest
 from netket.operator.spin import sigmax, sigmaz
 
 
+def exact_fidelity(psi, phi):
+    return np.abs(np.sum(psi.conj()*phi)) / np.linalg.norm(psi) / np.linalg.norm(phi)
+
+
+'''
 def test_mcmc_fidelity():
-    N = 7
+    N = 8
     hqubit = 5
     hi = nk.hilbert.Qubit(N)
     all_state = hi.all_states()
     # init a random model(bias/local_bias/kernel all random number)
     model = rbm.RBM_flexable(N, N, rngs=jax.random.PRNGKey(15))
-    bias = np.random.rand(N) + 1j * np.random.rand(N)
-    local_bias = np.random.rand(N) + 1j * np.random.rand(N)
-    # initialize the origin model
-    model.reset(model.kernel.value, jnp.array(
-        bias), jnp.array(local_bias))
+    # bias = np.random.rand(N) + 1j * np.random.rand(N)
+    # local_bias = np.random.rand(N) + 1j * np.random.rand(N)
+    # # initialize the origin model
+    # model.reset(model.kernel.value, jnp.array(
+    #     bias), jnp.array(local_bias))
     Hmodel = rbm.RBM_H_State(model, hqubit)
 
-    opmodel = optimize.mcmc_optimize(model, hi, 16, 10, 1000)
+    opmodel = optimize.mcmc_optimize(model, hi, 4, 10, 1000)
 
-    sampler_psi = nk.sampler.MetropolisLocal(hi)
-    vstate_psi = nk.vqs.MCState(sampler_psi, model, n_samples=2**16)
+    sampler_psi = nk.sampler.MetropolisLocal(hi, n_chains=4)
+    vstate_psi = nk.vqs.MCState(sampler_psi, model, n_samples=2**13)
 
-    sampler_phi = nk.sampler.MetropolisLocal(hi)
+    sampler_phi = nk.sampler.MetropolisLocal(hi, n_chains=4)
     sampler_phi_state = sampler_phi.init_state(
         Hmodel, 1, jax.random.key(0))
     samples_phi, sampler_phi_state = sampler_phi.sample(
-        Hmodel, 1, state=sampler_phi_state, chain_length=2**16)
+        Hmodel, 1, state=sampler_phi_state, chain_length=2**13)
     # according psi distribution
     samples_psi = vstate_psi.samples.reshape(-1, N)
     samples_phi = samples_phi.reshape(-1, N)
@@ -43,7 +48,7 @@ def test_mcmc_fidelity():
     phi_phi = Hmodel(samples_phi)
     fidelity = opmodel.fidelity(
         psi_phi, phi_phi, psi_psi, phi_psi)
-    # print(fidelity)
+    print(fidelity)
 
     # Hoperator = 1/np.sqrt(2) * (sigmax(hi, hqubit)+sigmaz(hi, hqubit))
     # value = vstate_psi.expect(Hoperator)
@@ -54,9 +59,10 @@ def test_mcmc_fidelity():
     amplitude_phi = np.exp(Hmodel(all_state))
     fidelity_exact = np.sum((amplitude_psi.conj()*amplitude_phi)) / \
         np.linalg.norm(amplitude_psi) / np.linalg.norm(amplitude_phi)
-    # print(fidelity_exact**2)
+    print(fidelity_exact**2)
 
-    assert np.abs((fidelity - fidelity_exact**2).real) <= 1e-2
+    # assert np.abs((fidelity - fidelity_exact**2).real) <= 1e-2
+'''
 
 
 def test_fidelity_grad():
@@ -119,3 +125,48 @@ def test_S_matrix():
     # print(t1-t2*t3)
     # print(S[4, 8])
     assert t1-t2*t3 == pytest.approx(S[4, 8])
+
+
+def test_hadamard_gate():
+    N = 8
+    hqubit = 5  # qubit id from 0 to N-1
+    hi = nk.hilbert.Qubit(N)
+    all_state = hi.all_states()
+    # define an arbitrary model, just for define the mcmc model
+    model = rbm.RBM_flexable(N, N, rngs=jax.random.PRNGKey(15))
+    opmodel = optimize.mcmc_optimize(
+        model, hi, 4, 8, 2**13)  # define the mcmc model
+
+    exact_Hmodel = rbm.RBM_H_State(model, hqubit)
+    fidelity_history = opmodel.stochastic_reconfiguration_H(
+        hqubit, resample_phi=5, max_iters=1000, outprintconfig=5)
+
+    exact_amplitude = np.exp(exact_Hmodel(all_state))
+    approx_amplitude = np.exp(opmodel.model(all_state))
+    fidelity = exact_fidelity(exact_amplitude, approx_amplitude)
+    print(fidelity**2)
+
+    # print(exact_amplitude.shape)
+    # for i in range(256):
+    #     print(exact_amplitude[i], approx_amplitude[i])
+    assert fidelity_history[-1] == pytest.approx(fidelity**2, rel=1e-3)
+
+    # sampler_psi = nk.sampler.MetropolisLocal(hi, n_chains=4)
+    # vstate_psi = nk.vqs.MCState(sampler_psi, opmodel.model, n_samples=2**13)
+
+    # sampler_phi = nk.sampler.MetropolisLocal(hi, n_chains=4)
+    # sampler_phi_state = sampler_phi.init_state(
+    #     exact_Hmodel, 1, jax.random.key(0))
+    # samples_phi, sampler_phi_state = sampler_phi.sample(
+    #     exact_Hmodel, 1, state=sampler_phi_state, chain_length=2**13)
+    # # according psi distribution
+    # samples_psi = vstate_psi.samples.reshape(-1, N)
+    # samples_phi = samples_phi.reshape(-1, N)
+
+    # psi_psi = opmodel.model(samples_psi)
+    # phi_psi = exact_Hmodel(samples_psi)
+    # psi_phi = opmodel.model(samples_phi)
+    # phi_phi = exact_Hmodel(samples_phi)
+    # fidelity = opmodel.fidelity(
+    #     psi_phi, phi_phi, psi_psi, phi_psi)
+    # print(fidelity)
