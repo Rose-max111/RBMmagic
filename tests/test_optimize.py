@@ -8,7 +8,7 @@ import pytest
 
 from netket.operator.spin import sigmax, sigmaz
 
-'''
+
 def test_mcmc_fidelity():
     N = 7
     hqubit = 5
@@ -57,4 +57,65 @@ def test_mcmc_fidelity():
     # print(fidelity_exact**2)
 
     assert np.abs((fidelity - fidelity_exact**2).real) <= 1e-2
-'''
+
+
+def test_fidelity_grad():
+    N = 8
+    hi = nk.hilbert.Qubit(N)
+    # define an arbitrary model, just for define the mcmc model
+    model = rbm.RBM_flexable(N, N, rngs=jax.random.PRNGKey(15))
+    opmodel = optimize.mcmc_optimize(
+        model, hi, 16, 10, 1000)  # define the mcmc model
+
+    n_samples = 2
+    phi_psi = np.array([[0.5-2j], [1.5+1j]])  # 2 samples
+    psi_psi = np.array([[-0.5-1j], [2.0+3j]])  # 2 samples
+    O = {"kernel": np.array([
+        [[0.5-2j, 1.5+1j, 0.5+2j], [1.0, -1.0, -0.3]],
+        [[-0.5-1j, 2.0+3j, 0.2+2j], [2.0, -2.0, 7-1j]]]), "bias":
+        np.array([
+            [0.5-2j, 1.5+1j],
+            [-0.5-1j, 2.0+3j]]), "local_bias":
+        np.array([[1.0, -1.0], [2.0, -2.0]])}
+    assert O["kernel"].shape == (2, 2, 3)  # 2 samples, 6 parameters
+    assert O["bias"].shape == (2, 2)  # 2 samples, 2 parameters
+    assert O["local_bias"].shape == (2, 2)  # 2 samples, 2 parameters
+
+    grad = opmodel.fidelity_grad(phi_psi, psi_psi, O)
+    assert grad["kernel"].shape == (2, 3)
+    assert grad["bias"].shape == (2,)
+    assert grad["local_bias"].shape == (2,)
+
+    term2_down = np.mean(np.exp(phi_psi - psi_psi))
+    # print((
+    #     1.5j) - ((0.5+2j)*np.exp((0.5-2j)-(-0.5-1j)) + (-0.5+1j)*np.exp((1.5+1j)-(2.0+3j))) / term2_down / 2
+    # )
+    # print(grad['kernel'][0, 0], term2_down)
+    assert grad['kernel'][0, 0] == pytest.approx((
+        1.5j) - ((0.5+2j)*np.exp((0.5-2j)-(-0.5-1j)) + (-0.5+1j)*np.exp((1.5+1j)-(2.0+3j))) / term2_down / 2)
+
+
+def test_S_matrix():
+    N = 8
+    hi = nk.hilbert.Qubit(N)
+    # define an arbitrary model, just for define the mcmc model
+    model = rbm.RBM_flexable(N, N, rngs=jax.random.PRNGKey(15))
+    opmodel = optimize.mcmc_optimize(
+        model, hi, 16, 10, 1000)  # define the mcmc model
+
+    n_samples = 2
+    O = {"kernel": np.array([
+        [[0.5-2j, 1.5+1j, 0.5+2j], [1.0, -1.0+3j, -0.3]],
+        [[-0.5-1j, 2.0+3j, 0.2+2j], [2.0, -2.0-1j, 7-1j]]]), "bias":
+        np.array([
+            [0.5-2j, 1.5+1j],
+            [-0.5-1j, 2.0+3j]]), "local_bias":
+        np.array([[1.0-2j, -1.0+2j], [2.0+3j, -2.0-1j]])}
+    S = opmodel.S_matrix(O)
+    # compute O[kernel:2,2 | local_bias:1]
+    t1 = ((-1.0-3j)*(1.0-2j) + (-2.0+1j)*(2.0+3j))/2
+    t2 = (-1.0-3j+-2.0+1j)/2
+    t3 = (1.0-2j+2.0+3j)/2
+    # print(t1-t2*t3)
+    # print(S[4, 8])
+    assert t1-t2*t3 == pytest.approx(S[4, 8])

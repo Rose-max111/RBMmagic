@@ -32,7 +32,7 @@ class mcmc_optimize():
         ratio = np.exp(phi_psi - psi_psi)
         term2_down = np.mean(ratio, axis=0)
         term2 = jax.tree.map(lambda x: np.mean(
-            x.conj() * ratio, axis=0) / term2_down, O)
+            x.conj() * ratio.reshape((ratio.shape[0],)+(1,)*(x.ndim-1)), axis=0) / term2_down, O)
         return jax.tree.map(lambda x, y: x - y, term1, term2)
 
     def S_matrix(self, O):
