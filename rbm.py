@@ -4,8 +4,11 @@ import numpy as np
 import flax.nnx as nnx
 import netket as nk
 import matplotlib.pyplot as plt
+import copy
 from netket.operator.spin import sigmax, sigmaz
 from tqdm import tqdm
+from scipy.linalg import block_diag
+import copy
 
 
 class RBM_flexable(nnx.Module):
@@ -54,10 +57,15 @@ class RBM_flexable(nnx.Module):
 
         self.local_bias = nnx.Param(new_local_bias)
 
+    def conj(self):
+        self.kernel = nnx.Param(self.kernel.value.conj())
+        self.bias = nnx.Param(self.bias.value.conj())
+        self.local_bias = nnx.Param(self.local_bias.value.conj())
+
 
 class RBM_H_State(nnx.Module):
     def __init__(self, model: RBM_flexable, qubit: int):
-        self.model = model
+        self.model = copy.deepcopy(model)
         self.qubit = qubit
 
     def __call__(self, x: jax.Array):
@@ -67,6 +75,21 @@ class RBM_H_State(nnx.Module):
 
     def apply(self, pars, x: jax.Array):
         return self.__call__(x)
+
+
+def state_preparation(state: RBM_flexable):
+    state_conj = copy.deepcopy(state)
+    state_conj.conj()
+
+    new_kernel_value = block_diag(
+        state.kernel.value, state_conj.kernel.value)
+    new_bias_value = np.concatenate(
+        (state.bias.value, state_conj.bias.value), axis=0)
+    new_local_bias_value = np.concatenate(
+        (state.local_bias.value, state_conj.local_bias.value), axis=0)
+    state_conj.reset(jnp.array(new_kernel_value), jnp.array(
+        new_bias_value), jnp.array(new_local_bias_value))
+    return state_conj
 
 
 def RBM_call_params(params, x):

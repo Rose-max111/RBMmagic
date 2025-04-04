@@ -172,3 +172,31 @@ def test_rbm_log_wf_auto_grad():
     #     lambda: myrbm_grad((kernel, bias, local_bias), all_state), number=100)
     # print("time_model_grad = ", time_model_grad,
     #       "time_numpy_grad = ", time_numpy_grad)
+
+
+def test_state_preparation():
+    N = 7
+    hi = nk.hilbert.Qubit(N)
+    all_state = hi.all_states()
+    # init a random model(bias/local_bias/kernel all random number)
+    model = rbm.RBM_flexable(N, N, rngs=jax.random.PRNGKey(15))
+    bias = np.random.rand(N) + 1j * np.random.rand(N)
+    local_bias = np.random.rand(N) + 1j * np.random.rand(N)
+    kernel = np.array(model.kernel.value)
+
+    model.reset(model.kernel.value, jnp.array(
+        bias), jnp.array(local_bias))
+
+    # test state preparation
+    state_combine = rbm.state_preparation(model)
+    for origin_sys_config in all_state:
+        for conj_sys_config in all_state:
+            combine_config = np.concatenate(
+                (origin_sys_config, conj_sys_config), axis=0)
+            combine_amplitude = np.exp(state_combine(combine_config))
+            origin_amplitude = np.exp(model(origin_sys_config))
+            conj_amplitude = np.exp(model(conj_sys_config)).conj()
+            assert np.abs(combine_amplitude -
+                          (origin_amplitude * conj_amplitude)) < 1e-5
+            print("combine_amplitude = ", combine_amplitude,
+                  "compute_amplitude = ", origin_amplitude * conj_amplitude)

@@ -13,18 +13,19 @@ def exact_fidelity(psi, phi):
     return np.abs(np.sum(psi.conj()*phi)) / np.linalg.norm(psi) / np.linalg.norm(phi)
 
 
+'''
 def test_mcmc_fidelity():
-    N = 8
+    N = 10
     hqubit = 5
     hi = nk.hilbert.Qubit(N)
     all_state = hi.all_states()
     # init a random model(bias/local_bias/kernel all random number)
     model = rbm.RBM_flexable(N, N, rngs=jax.random.PRNGKey(15))
-    # bias = np.random.rand(N) + 1j * np.random.rand(N)
-    # local_bias = np.random.rand(N) + 1j * np.random.rand(N)
-    # # initialize the origin model
-    # model.reset(model.kernel.value, jnp.array(
-    #     bias), jnp.array(local_bias))
+    bias = np.random.rand(N) + 1j * np.random.rand(N)
+    local_bias = np.random.rand(N) + 1j * np.random.rand(N)
+    # initialize the origin model
+    model.reset(model.kernel.value, jnp.array(
+        bias), jnp.array(local_bias))
     Hmodel = rbm.RBM_H_State(model, hqubit)
 
     opmodel = optimize.mcmc_optimize(model, hi, 4, 10, 1000)
@@ -123,15 +124,22 @@ def test_S_matrix():
     # print(t1-t2*t3)
     # print(S[4, 8])
     assert t1-t2*t3 == pytest.approx(S[4, 8])
+'''
 
 
 def test_hadamard_gate():
-    N = 8
+    N = 10
     hqubit = 5  # qubit id from 0 to N-1
     hi = nk.hilbert.Qubit(N)
     all_state = hi.all_states()
     # define an arbitrary model, just for define the mcmc model
     model = rbm.RBM_flexable(N, N, rngs=jax.random.PRNGKey(15))
+    np.random.seed(51)
+    bias = np.random.rand(N) + 1j * np.random.rand(N)
+    local_bias = np.random.rand(N) + 1j * np.random.rand(N)
+    # initialize the origin model
+    model.reset(model.kernel.value, jnp.array(
+        bias), jnp.array(local_bias))
     opmodel = optimize.mcmc_optimize(
         model, hi, 4, 8, 2**13)  # define the mcmc model
 

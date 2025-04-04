@@ -29,7 +29,7 @@ class mcmc_optimize():
                        (phi_psi.shape[0]))
         o2 = logsumexp(psi_phi - phi_phi, b=1.0 /
                        (psi_phi.shape[0]))
-        return np.exp(o1 + o2)
+        return np.exp(o1 + o2).real
 
     def fidelity_grad(self, phi_psi, psi_psi, O):
         term1 = jax.tree.map(lambda x: np.mean(x.conj(), axis=0), O)
@@ -65,9 +65,32 @@ class mcmc_optimize():
 
         return F, delta_params
 
+    '''
+    Noting!!
+    We might should add a pertubation to the original model in case |psi_i> = 0 but \partial_i |psi_i> is not 0
+    '''
+
     def stochastic_reconfiguration_H(self, qubit, tol=1e-3, lookback=5, max_iters=1000, resample_phi=None, lr=1e-1, lr_tau=None, lr_min=0.0, eps=1e-4, rndkey_phi=0, rndkey_psi=1, outprintconfig=None):
         # init target model distribution and its sampler
         target_model = RBM_H_State(self.model, qubit)
+
+        # add some pertubation to the model to avoid approximing zero
+        # np.random.seed(rndkey_psi)
+        pertubated_kernel_value = self.model.kernel.value + 0.01*np.random.normal(
+            size=(self.model.in_features, self.model.out_features)) + 1j*0.01*np.random.normal(size=(self.model.in_features, self.model.out_features))
+        pertubated_bias_value = self.model.bias.value + 0.01*np.random.normal(
+            size=self.model.out_features) + 1j*0.01*np.random.normal(size=self.model.out_features)
+        pertubated_local_bias_value = self.model.local_bias.value + 0.01*np.random.normal(
+            size=self.model.in_features) + 1j*0.01*np.random.normal(size=self.model.in_features)
+        self.model.reset(pertubated_kernel_value, pertubated_bias_value,
+                         pertubated_local_bias_value)
+
+        all_state = self.hilbert.all_states()
+        amplitude_psi = np.exp(self.model(all_state))
+        amplitude_phi = np.exp(target_model(all_state))
+        print(
+            f"exact_fidelity: {exact_fidelity(amplitude_psi, amplitude_phi)**2}")
+
         sampler_phi = nk.sampler.MetropolisLocal(
             self.hilbert, n_chains=self.n_chains, sweep_size=self.n_sweeps)
         sampler_phi_state = sampler_phi.init_state(
@@ -112,12 +135,13 @@ class mcmc_optimize():
                 lambda x, y: x - lr * y, vstate_psi.parameters, delta_params)
 
             history.append(F)
-            if outprintconfig is not None and step % outprintconfig == 0:
+            if outprintconfig is not None and step % outprintconfig == 1:
                 all_state = self.hilbert.all_states()
                 amplitude_psi = np.exp(self.model(all_state))
                 amplitude_phi = np.exp(target_model(all_state))
                 print(
                     f"step: {step}, F: {F}, exact_fidelity: {exact_fidelity(amplitude_psi, amplitude_phi)**2}")
+                # print(f"step: {step}, F: {F}")
             self.model.reset(vstate_psi.parameters["kernel"], vstate_psi.parameters["bias"],
                              vstate_psi.parameters["local_bias"])
 
@@ -137,6 +161,4 @@ class mcmc_optimize():
                 samples_phi = samples_phi.reshape(-1, samples_phi.shape[-1])
                 phi_phi = target_model(samples_phi)
 
-        # self.model.reset(vstate_psi.parameters["kernel"], vstate_psi.parameters["bias"],
-        #                  vstate_psi.parameters["local_bias"])
         return history
