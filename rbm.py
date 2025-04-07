@@ -34,6 +34,9 @@ class RBM_flexable(nnx.Module):
         y = jnp.log(2 * jnp.cosh(y))
         return jnp.sum(y, axis=-1)+jnp.dot(x, self.local_bias.value)
 
+    def apply(self, pars, x: jax.Array):
+        return self.__call__(x)
+
     def control_z(self, ctrl_qubit: int, target_qubit: int):
         self.out_features = self.out_features + 1
 
