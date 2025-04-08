@@ -8,6 +8,8 @@ from netket.operator.spin import sigmax, sigmaz
 from tqdm import tqdm
 from scipy.special import logsumexp
 from scipy.linalg import solve
+import timeit
+import sys
 
 from rbm import RBM_flexable, log_wf_grad, RBM_H_State
 
@@ -70,12 +72,11 @@ class mcmc_optimize():
     We might should add a pertubation to the original model in case |psi_i> = 0 but \partial_i |psi_i> is not 0
     '''
 
-    def stochastic_reconfiguration_H(self, qubit, tol=1e-3, lookback=5, max_iters=1000, resample_phi=None, lr=1e-1, lr_tau=None, lr_min=0.0, eps=1e-4, rndkey_phi=0, rndkey_psi=1, outprintconfig=None):
+    def stochastic_reconfiguration_H(self, qubit, tol=1e-3, lookback=5, max_iters=1000, resample_phi=None, lr=1e-1, lr_tau=None, lr_nstep=None, lr_min=0.0, eps=1e-4, rndkey_phi=0, rndkey_psi=1, outprintconfig=None):
         # init target model distribution and its sampler
         target_model = RBM_H_State(self.model, qubit)
 
         # add some pertubation to the model to avoid approximing zero
-        # np.random.seed(rndkey_psi)
         pertubated_kernel_value = self.model.kernel.value + 0.01*np.random.normal(
             size=(self.model.in_features, self.model.out_features)) + 1j*0.01*np.random.normal(size=(self.model.in_features, self.model.out_features))
         pertubated_bias_value = self.model.bias.value + 0.01*np.random.normal(
@@ -85,19 +86,13 @@ class mcmc_optimize():
         self.model.reset(pertubated_kernel_value, pertubated_bias_value,
                          pertubated_local_bias_value)
 
-        all_state = self.hilbert.all_states()
-        amplitude_psi = np.exp(self.model(all_state))
-        amplitude_phi = np.exp(target_model(all_state))
-        print(
-            f"exact_fidelity: {exact_fidelity(amplitude_psi, amplitude_phi)**2}")
-
         sampler_phi = nk.sampler.MetropolisLocal(
             self.hilbert, n_chains=self.n_chains, sweep_size=self.n_sweeps)
         sampler_phi_state = sampler_phi.init_state(
             target_model, 1, jax.random.key(rndkey_phi))
         # sample from the target model distribution
         samples_phi, sampler_phi_state = sampler_phi.sample(
-            target_model, 1, state=sampler_phi_state, chain_length=self.n_samples)
+            target_model, 1, state=sampler_phi_state, chain_length=self.n_samples // self.n_chains)
         # reshape samples to (n_chains * chain_length, nqubits)
         samples_phi = samples_phi.reshape(-1, samples_phi.shape[-1])
         # compute phi amplitude according phi distribution
@@ -114,6 +109,7 @@ class mcmc_optimize():
         step = 0
 
         while (diff_mean_F > tol or step < 2*lookback+1) and F_mean_new < 1-tol and step < max_iters:
+            start = timeit.default_timer()
             step += 1
 
             # sample from the model distribution
@@ -131,21 +127,27 @@ class mcmc_optimize():
             F, delta_params = self.sr_H_update(
                 psi_phi, phi_phi, psi_psi, phi_psi, O, eps)
 
+            if F < 0:
+                print(self.model.kernel.value)
+                print(self.model.bias.value)
+                print(self.model.local_bias.value)
+                sys.exit(1)
+
             vstate_psi.parameters = jax.tree.map(
                 lambda x, y: x - lr * y, vstate_psi.parameters, delta_params)
 
             history.append(F)
-            if outprintconfig is not None and step % outprintconfig == 1:
-                all_state = self.hilbert.all_states()
-                amplitude_psi = np.exp(self.model(all_state))
-                amplitude_phi = np.exp(target_model(all_state))
-                print(
-                    f"step: {step}, F: {F}, exact_fidelity: {exact_fidelity(amplitude_psi, amplitude_phi)**2}")
-                # print(f"step: {step}, F: {F}")
+            # print(f"step: {step}, F: {F}")
+            # if outprintconfig is not None and step % outprintconfig == 1:
+            # all_state = self.hilbert.all_states()
+            # amplitude_psi = np.exp(self.model(all_state))
+            # amplitude_phi = np.exp(target_model(all_state))
+            # print(
+            #     f"step: {step}, F: {F}, exact_fidelity: {exact_fidelity(amplitude_psi, amplitude_phi)**2}")
             self.model.reset(vstate_psi.parameters["kernel"], vstate_psi.parameters["bias"],
                              vstate_psi.parameters["local_bias"])
 
-            if lr_tau is not None:
+            if lr_tau is not None and step % lr_nstep == 0:
                 lr = lr * lr_tau
                 lr = max(lr, lr_min)
 
@@ -157,8 +159,10 @@ class mcmc_optimize():
 
             if resample_phi is not None and step % resample_phi == 0:
                 samples_phi, sampler_phi_state = sampler_phi.sample(
-                    target_model, 1, state=sampler_phi_state, chain_length=self.n_samples)
+                    target_model, 1, state=sampler_phi_state, chain_length=self.n_samples // self.n_chains)
                 samples_phi = samples_phi.reshape(-1, samples_phi.shape[-1])
                 phi_phi = target_model(samples_phi)
 
+            end = timeit.default_timer()
+            print(f"Time: {end - start}, Step: {step}, F: {F}")
         return history
