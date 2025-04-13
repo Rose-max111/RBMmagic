@@ -1,4 +1,3 @@
-import optimize
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -7,7 +6,10 @@ import rbm
 import pytest
 import magic
 import timeit
+import mpi4py
+import sys
 from functools import reduce
+from netket.utils import mpi
 
 from netket.operator.spin import sigmax, sigmaz
 
@@ -181,8 +183,14 @@ def test_brute_magic():
 def test_rbm_magic():
     np.random.seed(10)
     nqubit = 15
-    theta = np.random.rand(nqubit) * np.pi * 4
-    phi = np.random.rand(nqubit) * np.pi * 2
+    if mpi.rank == 0:
+        theta = np.random.rand(nqubit) * np.pi * 4
+        phi = np.random.rand(nqubit) * np.pi * 2
+    else:
+        theta = phi = None
+    assert mpi.rank == mpi4py.MPI.COMM_WORLD.Get_rank()
+    theta = mpi4py.MPI.COMM_WORLD.bcast(theta, root=0)
+    phi = mpi4py.MPI.COMM_WORLD.bcast(phi, root=0)
 
     local_bias = -1j * phi
     bias = np.arccos(1 / 2 * np.cos(theta / 2)) * 1j
@@ -211,3 +219,7 @@ def test_rbm_magic():
     print(additive_magic(theta, phi))
     print(magic_rbm)
     print(1 - np.exp2(-additive_magic(theta, phi)))
+
+
+if __name__ == "__main__":
+    test_rbm_magic()

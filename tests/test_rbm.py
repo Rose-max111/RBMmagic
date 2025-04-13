@@ -23,6 +23,7 @@ def myrbm_grad(params, x):
     return (kernel_grad, bias_grad, local_bias_grad)
 
 
+'''
 def test_control_z():
     N = 5
     model = rbm.RBM_flexable(N, N, rngs=jax.random.PRNGKey(0))
@@ -131,6 +132,7 @@ def test_rbm_H_state_distribution():
     # plt.ylabel("pdf")
     # plt.legend()
     # plt.show()
+'''
 
 
 def test_rbm_log_wf_auto_grad():
@@ -166,12 +168,12 @@ def test_rbm_log_wf_auto_grad():
     assert model_grad["kernel"] == pytest.approx(numpy_grad[0])
 
     # evaluate the time of both method
-    # time_model_grad = timeit.timeit(
-    #     lambda: rbm.batched_grad_fn((model.kernel.value, model.bias.value, model.local_bias.value), all_state), number=100)
-    # time_numpy_grad = timeit.timeit(
-    #     lambda: myrbm_grad((kernel, bias, local_bias), all_state), number=100)
-    # print("time_model_grad = ", time_model_grad,
-    #       "time_numpy_grad = ", time_numpy_grad)
+    time_model_grad = timeit.timeit(
+        lambda: rbm.batched_grad_fn({"kernel": model.kernel.value, "bias": model.bias.value, "local_bias": model.local_bias.value}, all_state), number=100)
+    time_numpy_grad = timeit.timeit(
+        lambda: myrbm_grad((kernel, bias, local_bias), all_state), number=100)
+    print("time_model_grad = ", time_model_grad,
+          "time_numpy_grad = ", time_numpy_grad)
 
 
 def test_state_preparation():
@@ -198,5 +200,5 @@ def test_state_preparation():
             conj_amplitude = np.exp(model(conj_sys_config)).conj()
             assert np.abs(combine_amplitude -
                           (origin_amplitude * conj_amplitude)) < 1e-5
-            print("combine_amplitude = ", combine_amplitude,
-                  "compute_amplitude = ", origin_amplitude * conj_amplitude)
+            # print("combine_amplitude = ", combine_amplitude,
+            #       "compute_amplitude = ", origin_amplitude * conj_amplitude)

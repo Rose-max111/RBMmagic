@@ -29,6 +29,12 @@ class RBM_flexable(nnx.Module):
         self.in_features = kernel_value.shape[0]
         self.out_features = kernel_value.shape[1]
 
+    def update(self, delta_params: dict, lr: float):
+        self.kernel.value = self.kernel.value - lr * delta_params["kernel"]
+        self.bias.value = self.bias.value - lr * delta_params["bias"]
+        self.local_bias.value = self.local_bias.value - \
+            lr * delta_params["local_bias"]
+
     def __call__(self, x: jax.Array):
         y = jnp.dot(x, self.kernel.value) + self.bias.value
         y = jnp.log(2 * jnp.cosh(y))
@@ -59,6 +65,18 @@ class RBM_flexable(nnx.Module):
             1/2 * np.log(7/3) + 1j * np.pi)
 
         self.local_bias = nnx.Param(new_local_bias)
+
+    def expand_dims(self, out_features: int):
+        assert out_features > self.out_features
+        append_kernel_value = jnp.zeros(
+            (self.in_features, out_features - self.out_features), dtype=complex)
+        append_bias_value = jnp.ones(
+            out_features - self.out_features, dtype=complex) * 1j * jnp.pi / 3
+        self.kernel = nnx.Param(jnp.concatenate(
+            [self.kernel.value, append_kernel_value], axis=1))
+        self.bias = nnx.Param(jnp.concatenate(
+            [self.bias.value, append_bias_value], axis=0))
+        self.out_features = out_features
 
     def conj(self):
         self.kernel = nnx.Param(self.kernel.value.conj())
