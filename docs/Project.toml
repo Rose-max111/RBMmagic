@@ -1,0 +1,3 @@
+[deps]
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+RBMmagic = "19422b9a-b489-4410-b8e9-1735b010e3b6"
